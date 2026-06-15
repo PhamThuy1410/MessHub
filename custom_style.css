@@ -48,20 +48,6 @@ html.platform-meta div[role="banner"] {
   z-index: 9999 !important;
 }
 
-/*
- * KHÔNG can thiệp:
- *
- * div[role="banner"] > div
- * .x78zum5
- * .xe8uvvx
- * .x9f619...
- *
- * Đây là các class/layout động của Facebook.
- */
-
-/* =========================================================
-   CLEANUP
-   ========================================================= */
 
 html.platform-meta {
   background: #18191a !important;
