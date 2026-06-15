@@ -1,0 +1,135 @@
+/* =========================================================
+   9META - FACEBOOK UI FIX
+   ========================================================= */
+
+:root,
+.__fb-light-mode,
+.__fb-dark-mode {
+  --nine-meta-accent: #7c5cff;
+  --nine-meta-accent-2: #6ea8ff;
+}
+
+/* =========================================================
+   SCROLLBAR
+   ========================================================= */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.22);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.38);
+}
+
+/* =========================================================
+   FACEBOOK HEADER
+   ========================================================= */
+
+/* Chỉ ẩn banner khi đang ở giao diện Messenger */
+html.platform-meta:not(:has(#9meta-feed-toggle-btn))
+div[role="banner"] {
+  display: none !important;
+}
+
+/* Giữ header ổn định, không ép fixed */
+html.platform-meta div[role="banner"] {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 9999 !important;
+}
+
+/*
+ * KHÔNG can thiệp:
+ *
+ * div[role="banner"] > div
+ * .x78zum5
+ * .xe8uvvx
+ * .x9f619...
+ *
+ * Đây là các class/layout động của Facebook.
+ */
+
+/* =========================================================
+   CLEANUP
+   ========================================================= */
+
+html.platform-meta {
+  background: #18191a !important;
+}
+
+html.platform-meta footer {
+  display: none !important;
+}
+
+html.platform-meta div[role="progressbar"] {
+  display: none !important;
+}
+
+/* =========================================================
+   FLOATING CHAT BUTTON
+   ========================================================= */
+
+#9meta-feed-toggle-btn {
+  position: fixed !important;
+  top: 12px !important;
+  right: 15px !important;
+  z-index: 999999 !important;
+}
+
+/* =========================================================
+   FORM CONTROLS
+   ========================================================= */
+
+select,
+input,
+textarea {
+  background: #1c1e21 !important;
+  color: #fff !important;
+  border: 1px solid #3a3b3c !important;
+}
+
+select {
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+}
+
+select option {
+  background: #1c1e21 !important;
+  color: #fff !important;
+}
+
+/* ============================================================ */
+/* ĐIỀU KHIỂN HIỂN THỊ CHO BẢNG CÔNG CỤ TOOLS LAUNCHER          */
+/* ============================================================ */
+
+/* Mặc định ẩn hoàn toàn bảng overlay khi chưa được kích hoạt */
+#tools-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+}
+
+/* Lớp class này sẽ được JavaScript tự động thêm vào khi bạn click nút */
+#tools-overlay.active {
+  display: flex !important;
+}
+
+/* Làm đẹp nhẹ cho bố cục bảng điều khiển nổi */
+.tools-panel {
+  background: #1c1e29 !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+
