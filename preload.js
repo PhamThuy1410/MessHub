@@ -238,7 +238,7 @@ function runInjection(currentSettings) {
       function autoHandleZaloPrompts() {
         if (!isZalo) return;
         try {
-          var all = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
+          var all = Array.from(document.querySelectorAll('.zl-modal button, .zl-modal [role="button"], .zl-dialog button, .zl-dialog [role="button"]'));
           var allowBtn = all.find(function(el) {
             var text = getVisibleText(el);
             return text === 'Cho phép' || text === 'Allow' || text === 'Đồng ý' || text === 'OK';
