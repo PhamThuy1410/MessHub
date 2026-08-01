@@ -1,7 +1,7 @@
 // ============================================================
-//  Ứng dụng 9Meta Desktop
+//  Ứng dụng MessHub Desktop
 //  Nhân: Chromium (Google Chrome)
-//  Tác giả: ThuyP
+//  Tác giả: Nguyễn Đình Thọ
 // ============================================================
 
 const {
@@ -158,7 +158,7 @@ function createTray() {
   try { trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 }); } catch { trayIcon = nativeImage.createEmpty(); }
   tray = new Tray(trayIcon);
   updateTrayMenu();
-  tray.setToolTip('9Meta');
+  tray.setToolTip('MessHub');
   tray.on('click', () => {
     if (!mainWindow) return;
     if (mainWindow.isVisible() && mainWindow.isFocused()) mainWindow.hide();
@@ -170,7 +170,7 @@ function createTray() {
 function updateTrayMenu() {
   if (!tray) return;
   const contextMenu = Menu.buildFromTemplate([
-    { label: '💬 Mở 9Meta', click: () => { mainWindow.show(); mainWindow.focus(); } },
+    { label: '💬 Mở MessHub', click: () => { mainWindow.show(); mainWindow.focus(); } },
     { label: '🔒 Khóa ứng dụng', click: lockApp },
     { type: 'separator' },
     { label: '🔄 Tải lại trang', click: () => activeProfileId && browserViews[activeProfileId]?.webContents.reload() },
@@ -431,7 +431,7 @@ function createWindow() {
   const { windowBounds } = settings;
   mainWindow = new BrowserWindow({
     width: windowBounds.width || 1200, height: windowBounds.height || 800, x: windowBounds.x, y: windowBounds.y,
-    minWidth: 400, minHeight: 300, title: '9Meta', icon: path.join(__dirname, 'icon.png'),
+    minWidth: 400, minHeight: 300, title: 'MessHub', icon: path.join(__dirname, 'icon.png'),
     backgroundColor: settings.isDarkMode ? '#242526' : '#ffffff', show: !settings.startMinimized, autoHideMenuBar: true, titleBarOverlay: false,
     webPreferences: { nodeIntegration: true, contextIsolation: false, spellcheck: false },
   });
@@ -678,7 +678,7 @@ function checkOmnichannelNotifications() {
     lastNotificationSummary = currentSummary;
     if (Notification.isSupported()) {
       const notification = new Notification({
-        title: '📥 9Meta — Gộp thông báo',
+        title: '📥 MessHub — Gộp thông báo',
         body: `Bạn có ${currentSummary} chưa đọc cần xử lý.`,
         silent: false,
         icon: path.join(__dirname, 'icon.png')
@@ -703,7 +703,7 @@ function updateBadge(count) {
     if (count > 0) { try { mainWindow.setOverlayIcon(createBadgeIcon(count), `${count} tin nhắn chưa đọc`); } catch { mainWindow.setOverlayIcon(null, ''); } }
     else mainWindow.setOverlayIcon(null, '');
   }
-  if (tray) tray.setToolTip(count > 0 ? `9Meta — ${count} tin nhắn chưa đọc` : '9Meta');
+  if (tray) tray.setToolTip(count > 0 ? `MessHub — ${count} tin nhắn chưa đọc` : 'MessHub');
 }
 function registerGlobalShortcuts() {
   const hotkey = settings.globalHotkey || 'Ctrl+Shift+M';
