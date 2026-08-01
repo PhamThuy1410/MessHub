@@ -1,7 +1,6 @@
-const { ipcRenderer, shell, clipboard } = require('electron');
+const { ipcRenderer } = require('electron');
 
 const profilesList = document.getElementById('profiles-list');
-const modalOverlay = document.getElementById('modal-overlay');
 const modalTitle = document.getElementById('modal-title');
 const nameInput = document.getElementById('profile-name-input');
 const proxyInput = document.getElementById('profile-proxy-input');
@@ -11,13 +10,7 @@ const avatarImg = document.getElementById('avatar-img');
 const avatarLetter = document.getElementById('avatar-letter');
 const avatarInput = document.getElementById('avatar-input');
 
-const overlayIds = [
-  'dashboard-overlay',
-  'workspace-overlay',
-  'crm-overlay',
-  'campaign-overlay',
-  'ai-overlay',
-  'quick-replies-overlay',
+const overlayIds = [  'workspace-overlay',  'quick-replies-overlay',
   'modal-overlay',
   'update-overlay',
   'downloads-overlay',
@@ -26,10 +19,7 @@ const overlayIds = [
 const defaultState = {
   profiles: [],
   quickReplies: [],
-  crmContacts: [],
-  campaigns: [],
   analyticsEvents: [],
-  aiSettings: { endpoint: '', apiKey: '', model: 'gpt-4o-mini' },
 };
 
 let workspaceState = ipcRenderer.sendSync('workspace-get-state') || { currentId: 'default', workspaces: [], data: defaultState };
@@ -43,21 +33,12 @@ let hasLockPassword = false;
 let isDarkMode = true;
 let editingProfile = null;
 let tempAvatarPath = null;
-let editingContactId = null;
-let selectedCampaignId = null;
-let currentChatSnapshot = null;
-let campaignTimers = {};
 
 function normalizeWorkspaceData(data = {}) {
   return {
-    ...defaultState,
-    ...data,
     profiles: Array.isArray(data.profiles) ? data.profiles : [],
     quickReplies: Array.isArray(data.quickReplies) ? data.quickReplies : [],
-    crmContacts: Array.isArray(data.crmContacts) ? data.crmContacts : [],
-    campaigns: Array.isArray(data.campaigns) ? data.campaigns : [],
     analyticsEvents: Array.isArray(data.analyticsEvents) ? data.analyticsEvents : [],
-    aiSettings: { ...defaultState.aiSettings, ...(data.aiSettings || {}) },
   };
 }
 function normalizeProfiles(list) {
@@ -79,7 +60,6 @@ function trackEvent(type, payload = {}) {
   workspaceData.analyticsEvents.unshift({ id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, type, payload, createdAt: Date.now() });
   workspaceData.analyticsEvents = workspaceData.analyticsEvents.slice(0, 120);
   persistWorkspace();
-  renderDashboard();
 }
 function openOverlay(id) {
   const el = document.getElementById(id);
@@ -107,58 +87,7 @@ function closeOverlay(id) {
 function escapeHtml(s) { return String(s || '').replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function platformIcon(platform) { return { zalo: 'Z', telegram: '✈', messenger: 'M', fanpage: '🚩', whatsapp: 'W', teams: 'T', gmail: 'G', tiktok: '🎵' }[platform || 'zalo'] || 'A'; }function formatDate(ts) { return new Date(ts || Date.now()).toLocaleString('vi-VN'); }
 function getActiveProfile() { return profiles.find((p) => p.id === activeProfileId) || profiles[0] || null; }
-function getZaloProfiles() { return profiles.filter((profile) => (profile.platform || 'zalo') === 'zalo'); }
 function getCurrentWorkspaceName() { return workspaceState.workspaces.find((w) => w.id === workspaceState.currentId)?.name || 'Workspace'; }
-function statusLabel(status) { return ({ new: 'Mới', hot: 'Khách nóng', follow: 'Đang chăm sóc', bought: 'Đã mua', blacklist: 'Blacklist' }[status] || status || 'Mới'); }
-function randomBetween(min, max) {
-  const low = Number(min) || 1000;
-  const high = Number(max) || low;
-  return Math.floor(low + Math.random() * Math.max(high - low, 1));
-}
-let toolsLauncherOpen = false;
-const TOOL_ACTION_HANDLERS = {
-  dashboard: () => { renderDashboard(); openOverlay('dashboard-overlay'); },
-  workspaces: () => { renderWorkspaces(); openOverlay('workspace-overlay'); },
-  crm: () => { renderCRMCurrentChat(); openOverlay('crm-overlay'); },
-  campaigns: () => { renderCampaigns(); openOverlay('campaign-overlay'); },
-  ai: () => { fillAISettings(); openOverlay('ai-overlay'); },
-  'quick-replies': () => { renderQuickReplies(); openOverlay('quick-replies-overlay'); },
-  update: () => { openOverlay('update-overlay'); ipcRenderer.send('check-for-updates'); ipcRenderer.send('get-update-state'); },
-  lock: () => ipcRenderer.send('lock-app'),
-  shield: () => ipcRenderer.send('toggle-zadark-shield'),
-  'dark-mode': () => {
-    isDarkMode = !isDarkMode;
-    document.body.className = isDarkMode ? 'dark-mode' : 'light-mode';
-    document.getElementById('icon-sun').style.display = isDarkMode ? 'none' : 'block';
-    document.getElementById('icon-moon').style.display = isDarkMode ? 'block' : 'none';
-    ipcRenderer.send('set-theme', isDarkMode);
-  },
-  'zoom-in': () => ipcRenderer.send('zoom-in'),
-  'zoom-out': () => ipcRenderer.send('zoom-out'),
-  fullscreen: () => ipcRenderer.send('toggle-fullscreen'),
-  pin: () => {
-    document.getElementById('btn-pin').classList.toggle('active');
-    ipcRenderer.send('toggle-always-on-top');
-  },
-  reload: () => ipcRenderer.send('reload-page'),
-};
-let viewVisibleToggle = true;
-function setLauncherOpen(open) {
-  toolsLauncherOpen = !!open;
-    if (toolsLauncherOpen) {
-    runToolAction('dashboard'); // Gọi hàm render dữ liệu và mở Dashboard-overlay
-  } else {
-    closeOverlay('dashboard-overlay'); // Đóng overlay khi tắt
-  }
-}
-function runToolAction(action, autoClose = true) {
-  const handler = TOOL_ACTION_HANDLERS[action];
-  if (!handler) return;
-  if (autoClose) setLauncherOpen(false);
-  handler();
-}
-function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-
 function migrateLegacyProfiles() {
   if (workspaceData.profiles.length) return;
   try {
@@ -209,8 +138,6 @@ function switchProfile(id) {
   renderSidebar();
   const profile = getActiveProfile();
   if (profile) ipcRenderer.send('switch-profile', profile);
-  renderCRMCurrentChat();
-  renderCampaigns();
 }
 function openModal(profileToEdit = null) {
   editingProfile = profileToEdit;
@@ -236,36 +163,6 @@ function updateAvatarPreview() {
   }
 }
 
-function renderDashboard() {
-  const contacts = workspaceData.crmContacts || [];
-  const campaigns = workspaceData.campaigns || [];
-  const quickReplies = workspaceData.quickReplies || [];
-  const events = workspaceData.analyticsEvents || [];
-  const running = campaigns.filter((c) => c.status === 'running').length;
-  const completed = campaigns.filter((c) => c.status === 'done').length;
-  document.getElementById('dashboard-stats').innerHTML = [
-    { label: 'Profiles', value: profiles.length, foot: 'Tài khoản trong workspace' },
-    { label: 'CRM Contacts', value: contacts.length, foot: 'Tổng khách hàng cục bộ' },
-    { label: 'Campaigns', value: campaigns.length, foot: `${running} chạy • ${completed} hoàn tất` },
-    { label: 'Quick Replies', value: quickReplies.length, foot: 'Mẫu phản hồi nhanh' },
-    { label: 'Downloads', value: downloads.length, foot: 'Lịch sử tải xuống' },
-    { label: 'Events', value: events.length, foot: 'Analytics nội bộ' },
-  ].map((item) => `<div class="metric-card"><div class="metric-label">${item.label}</div><div class="metric-value">${item.value}</div><div class="metric-foot">${item.foot}</div></div>`).join('');
-  document.getElementById('dashboard-current-workspace').innerText = getCurrentWorkspaceName();
-  document.getElementById('dashboard-workspace-summary').innerHTML = `Workspace <strong>${escapeHtml(getCurrentWorkspaceName())}</strong> đang chứa <strong>${profiles.length}</strong> profile, <strong>${contacts.length}</strong> contact và <strong>${quickReplies.length}</strong> quick replies.`;
-  const sentCount = campaigns.reduce((sum, c) => sum + ((c.logs || []).filter((log) => log.status === 'sent').length), 0);
-  const failCount = campaigns.reduce((sum, c) => sum + ((c.logs || []).filter((log) => log.status === 'failed').length), 0);
-  document.getElementById('dashboard-kpis').innerHTML = `
-    <span class="chip success">${sentCount} lượt gửi OK</span>
-    <span class="chip hot">${running} campaign chạy</span>
-    <span class="chip danger">${failCount} lượt lỗi</span>
-    <span class="chip">${events.filter((e) => e.type === 'ai_rewrite').length} AI rewrite</span>`;
-  const activityList = document.getElementById('activity-list');
-  const latest = events.slice(0, 12);
-  if (!latest.length) activityList.innerHTML = '<div class="empty-state">Chưa có activity nào.</div>';
-  else activityList.innerHTML = latest.map((event) => `<div class="activity-item"><div class="row"><div class="title-sm">${escapeHtml(event.type)}</div><div class="muted">${formatDate(event.createdAt)}</div></div><div class="muted">${escapeHtml(JSON.stringify(event.payload || {}))}</div></div>`).join('');
-}
-
 function renderWorkspaces() {
   const list = document.getElementById('workspace-list');
   if (!workspaceState.workspaces.length) {
@@ -289,225 +186,6 @@ function renderWorkspaces() {
       trackEvent('workspace_switch', { workspaceId: id });
     };
   });
-}
-
-function renderCurrentChatSummary() {
-  const box = document.getElementById('crm-current-chat');
-  if (!currentChatSnapshot) {
-    box.innerHTML = 'Chưa có dữ liệu tab hiện tại.';
-    return;
-  }
-  box.innerHTML = `<div class="title-sm">${escapeHtml(currentChatSnapshot.name || 'Không rõ tên')}</div><div class="muted">Platform: ${escapeHtml(currentChatSnapshot.platform || '')}</div><div class="muted">Profile: ${escapeHtml(getActiveProfile()?.name || '')}</div>`;
-}
-function renderCRMList() {
-  const query = document.getElementById('crm-search').value.trim().toLowerCase();
-  const activeProfile = getActiveProfile();
-  const contacts = (workspaceData.crmContacts || []).filter((contact) => !activeProfile || contact.profileId === activeProfile.id);
-  const filtered = contacts.filter((contact) => [contact.name, contact.phone, (contact.tags || []).join(',')].join(' ').toLowerCase().includes(query));
-  const list = document.getElementById('crm-contact-list');
-  if (!filtered.length) {
-    list.innerHTML = '<div class="empty-state">Chưa có contact cho profile này.</div>';
-    return;
-  }
-  list.innerHTML = filtered.map((contact) => `
-    <div class="contact-item" data-contact="${contact.id}">
-      <div class="row"><div><div class="title-sm">${escapeHtml(contact.name || 'Chưa đặt tên')}</div><div class="muted">${escapeHtml(contact.phone || 'Chưa có số điện thoại')}</div></div><span class="chip ${contact.status === 'hot' ? 'hot' : contact.status === 'blacklist' ? 'danger' : contact.status === 'bought' ? 'success' : ''}">${escapeHtml(statusLabel(contact.status))}</span></div>
-      <div class="tag-list mt-12">${(contact.tags || []).map((tag) => `<span class="chip">${escapeHtml(tag)}</span>`).join('')}</div>
-      <div class="muted mt-12">${escapeHtml(contact.note || '')}</div>
-    </div>`).join('');
-  list.querySelectorAll('[data-contact]').forEach((item) => {
-    item.onclick = () => {
-      const contact = workspaceData.crmContacts.find((entry) => entry.id === item.getAttribute('data-contact'));
-      if (contact) fillContactForm(contact);
-    };
-  });
-}
-function fillContactForm(contact) {
-  editingContactId = contact?.id || null;
-  document.getElementById('crm-name').value = contact?.name || '';
-  document.getElementById('crm-phone').value = contact?.phone || '';
-  document.getElementById('crm-status').value = contact?.status || 'new';
-  document.getElementById('crm-tags').value = (contact?.tags || []).join(', ');
-  document.getElementById('crm-note').value = contact?.note || '';
-  document.getElementById('crm-selected-label').innerText = contact ? `Đang sửa: ${contact.name}` : 'Đang tạo contact mới';
-}
-function renderCRMCurrentChat() {
-  renderCurrentChatSummary();
-  renderCRMList();
-  const zaloCount = getZaloProfiles().length;
-  const activeZaloContacts = (workspaceData.crmContacts || []).filter((contact) => contact.profileId === getActiveProfile()?.id && (getActiveProfile()?.platform || 'zalo') === 'zalo').length;
-  document.getElementById('campaign-target-count').innerText = `${zaloCount} Zalo account • ${activeZaloContacts} CRM target`;
-}
-function saveContact() {
-  const activeProfile = getActiveProfile();
-  if (!activeProfile) return alert('Chưa có profile nào.');
-  const name = document.getElementById('crm-name').value.trim();
-  if (!name) return alert('Vui lòng nhập tên contact.');
-  const payload = {
-    id: editingContactId || `crm_${Date.now()}`,
-    profileId: activeProfile.id,
-    name,
-    phone: document.getElementById('crm-phone').value.trim(),
-    status: document.getElementById('crm-status').value,
-    tags: document.getElementById('crm-tags').value.split(',').map((item) => item.trim()).filter(Boolean),
-    note: document.getElementById('crm-note').value.trim(),
-    platform: activeProfile.platform,
-    updatedAt: Date.now(),
-  };
-  if (editingContactId) workspaceData.crmContacts = workspaceData.crmContacts.map((entry) => entry.id === editingContactId ? payload : entry);
-  else workspaceData.crmContacts.unshift({ ...payload, createdAt: Date.now() });
-  persistWorkspace();
-  trackEvent(editingContactId ? 'crm_contact_updated' : 'crm_contact_created', { id: payload.id, profileId: activeProfile.id });
-  fillContactForm(null);
-  renderCRMCurrentChat();
-  renderDashboard();
-}
-function deleteContact() {
-  if (!editingContactId) return;
-  if (!confirm('Xóa contact này?')) return;
-  workspaceData.crmContacts = workspaceData.crmContacts.filter((entry) => entry.id !== editingContactId);
-  persistWorkspace();
-  trackEvent('crm_contact_deleted', { id: editingContactId });
-  fillContactForm(null);
-  renderCRMCurrentChat();
-}
-
-function renderCampaigns() {
-  const list = document.getElementById('campaign-list');
-  const activeProfile = getActiveProfile();
-  const campaigns = (workspaceData.campaigns || []).filter((campaign) => campaign.platform === 'zalo' || (!campaign.platform && (!activeProfile || campaign.profileId === activeProfile.id)));
-  if (!campaigns.length) {
-    list.innerHTML = '<div class="empty-state">Chưa có campaign nào.</div>';
-    return;
-  }
-  list.innerHTML = campaigns.map((campaign) => {
-    const sent = (campaign.logs || []).filter((log) => log.status === 'sent').length;
-    const failed = (campaign.logs || []).filter((log) => log.status === 'failed').length;
-    const total = campaign.targets?.length || 0;
-    return `
-      <div class="campaign-item" data-campaign="${campaign.id}">
-        <div class="row"><div><div class="title-sm">${escapeHtml(campaign.name)}</div><div class="muted">${sent}/${total} sent • ${failed} fail</div></div><span class="pill ${escapeHtml(campaign.status || 'draft')}">${escapeHtml(campaign.status || 'draft')}</span></div>
-        <div class="muted mt-12">${escapeHtml(campaign.message || '')}</div>
-        <div class="row mt-12"><button class="modal-btn cancel" data-action="select">Chọn</button><button class="modal-btn cancel" data-action="pause">Pause</button><button class="modal-btn cancel" data-action="stop">Stop</button></div>
-      </div>`;
-  }).join('');
-  list.querySelectorAll('[data-campaign]').forEach((item) => {
-    const id = item.getAttribute('data-campaign');
-    item.querySelector('[data-action="select"]').onclick = () => { selectedCampaignId = id; alert('Đã chọn campaign để chạy.'); };
-    item.querySelector('[data-action="pause"]').onclick = () => pauseCampaign(id);
-    item.querySelector('[data-action="stop"]').onclick = () => stopCampaign(id);
-  });
-}
-function createCampaign() {
-  const activeProfile = getActiveProfile();
-  if (!activeProfile) return alert('Chưa có profile.');
-  if ((activeProfile.platform || 'zalo') !== 'zalo') return alert('Tính năng gửi hàng loạt chỉ áp dụng cho tài khoản Zalo. Hãy chọn một profile Zalo trước.');
-  const zaloProfiles = getZaloProfiles();
-  if (!zaloProfiles.length) return alert('Workspace chưa có tài khoản Zalo nào.');
-  const targets = workspaceData.crmContacts.filter((contact) => contact.profileId === activeProfile.id);
-  if (!targets.length) return alert('Profile Zalo hiện tại chưa có contact CRM nào.');
-  const name = document.getElementById('campaign-name').value.trim();
-  const message = document.getElementById('campaign-message').value.trim();
-  if (!name || !message) return alert('Vui lòng nhập tên chiến dịch và nội dung.');
-  const batchSize = Number(document.getElementById('campaign-batch-size').value || 20);
-  const campaign = {
-    id: `camp_${Date.now()}`,
-    platform: 'zalo',
-    profileId: activeProfile.id,
-    profileIds: document.getElementById('campaign-mode').value === 'zalo_accounts' ? zaloProfiles.map((profile) => profile.id) : [activeProfile.id],
-    name,
-    message,
-    delayMin: Number(document.getElementById('campaign-delay-min').value || 2500),
-    delayMax: Number(document.getElementById('campaign-delay-max').value || 6500),
-    batchSize,
-    mode: document.getElementById('campaign-mode').value,
-    status: 'draft',
-    createdAt: Date.now(),
-    targets: targets.slice(0, batchSize).map((target) => ({ id: target.id, name: target.name, phone: target.phone })),
-    accountLogs: [],
-    logs: [],
-  };
-  workspaceData.campaigns.unshift(campaign);
-  selectedCampaignId = campaign.id;
-  persistWorkspace();
-  trackEvent('campaign_created', { id: campaign.id, targets: campaign.targets.length });
-  renderCampaigns();
-  renderDashboard();
-}
-function updateCampaign(campaignId, patch) {
-  workspaceData.campaigns = workspaceData.campaigns.map((campaign) => campaign.id === campaignId ? { ...campaign, ...patch } : campaign);
-  persistWorkspace();
-  renderCampaigns();
-  renderDashboard();
-}
-async function runCampaign(campaignId) {
-  const campaign = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-  if (!campaign) return alert('Không tìm thấy campaign.');
-  if (campaign.platform && campaign.platform !== 'zalo') return alert('Campaign này không phải campaign Zalo.');
-  campaign.status = 'running';
-  persistWorkspace();
-  renderCampaigns();
-  trackEvent('zalo_campaign_started', { id: campaignId, mode: campaign.mode });
-  if (campaign.mode === 'zalo_accounts') return runZaloAccountsCampaign(campaignId);
-  for (const target of campaign.targets) {
-    const latest = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-    if (!latest || latest.status === 'stopped') break;
-    if (latest.status === 'paused') {
-      campaignTimers[campaignId] = setTimeout(() => runCampaign(campaignId), 1200);
-      return;
-    }
-    await wait(randomBetween(latest.delayMin, latest.delayMax));
-    try {
-      const result = latest.mode === 'auto'
-        ? await ipcRenderer.invoke('active-chat-send-text', latest.message, { platform: 'zalo', profileId: latest.profileId })
-        : { ok: true, assisted: true, message: 'Assist mode: đã lưu log, bạn tự mở đúng hội thoại để gửi.' };
-      const refreshed = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-      refreshed.logs.push({ id: `${Date.now()}-${target.id}`, targetId: target.id, targetName: target.name, status: result.ok ? 'sent' : 'failed', detail: result.message || '', createdAt: Date.now() });
-      persistWorkspace();
-      trackEvent(result.ok ? 'zalo_campaign_sent' : 'zalo_campaign_failed', { campaignId, targetId: target.id });
-      renderCampaigns();
-    } catch (err) {
-      const refreshed = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-      refreshed.logs.push({ id: `${Date.now()}-${target.id}`, targetId: target.id, targetName: target.name, status: 'failed', detail: err.message || String(err), createdAt: Date.now() });
-      persistWorkspace();
-      trackEvent('zalo_campaign_failed', { campaignId, targetId: target.id });
-    }
-  }
-  updateCampaign(campaignId, { status: 'done' });
-  trackEvent('zalo_campaign_done', { id: campaignId });
-}
-async function runZaloAccountsCampaign(campaignId) {
-  const campaign = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-  const zaloProfiles = getZaloProfiles().filter((profile) => (campaign.profileIds || []).includes(profile.id));
-  if (!zaloProfiles.length) return updateCampaign(campaignId, { status: 'failed' });
-  for (const profile of zaloProfiles) {
-    const latest = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-    if (!latest || latest.status === 'stopped') break;
-    if (latest.status === 'paused') {
-      campaignTimers[campaignId] = setTimeout(() => runZaloAccountsCampaign(campaignId), 1200);
-      return;
-    }
-    activeProfileId = profile.id;
-    switchProfile(profile.id);
-    await wait(1800);
-    await wait(randomBetween(latest.delayMin, latest.delayMax));
-    const message = latest.message.replace(/\{account\}/g, profile.name || 'Zalo');
-    const result = await ipcRenderer.invoke('active-chat-send-text', message, { platform: 'zalo', profileId: profile.id });
-    const refreshed = workspaceData.campaigns.find((entry) => entry.id === campaignId);
-    refreshed.accountLogs = refreshed.accountLogs || [];
-    refreshed.accountLogs.push({ id: `${Date.now()}-${profile.id}`, profileId: profile.id, profileName: profile.name, status: result.ok ? 'sent' : 'failed', detail: result.message || '', createdAt: Date.now() });
-    persistWorkspace();
-    trackEvent(result.ok ? 'zalo_account_campaign_sent' : 'zalo_account_campaign_failed', { campaignId, profileId: profile.id });
-    renderCampaigns();
-  }
-  updateCampaign(campaignId, { status: 'done' });
-  trackEvent('zalo_accounts_campaign_done', { id: campaignId });
-}
-function pauseCampaign(campaignId) { updateCampaign(campaignId, { status: 'paused' }); trackEvent('campaign_paused', { id: campaignId }); }
-function stopCampaign(campaignId) {
-  if (campaignTimers[campaignId]) clearTimeout(campaignTimers[campaignId]);
-  updateCampaign(campaignId, { status: 'stopped' });
-  trackEvent('campaign_stopped', { id: campaignId });
 }
 
 function renderQuickReplies() {
@@ -553,7 +231,6 @@ function addQuickReplyFromInput() {
   trackEvent('quick_reply_created', { length: workspaceData.quickReplies.length });
   input.value = '';
   renderQuickReplies();
-  renderDashboard();
 }
 
 function renderDownloads() {
@@ -582,54 +259,12 @@ function renderUpdate() {
   document.getElementById('update-install').style.display = updateState.status === 'downloaded' ? 'inline-flex' : 'none';
 }
 
-function fillAISettings() {
-  document.getElementById('ai-endpoint').value = workspaceData.aiSettings.endpoint || localStorage.getItem('AI_ENDPOINT') || '';
-  document.getElementById('ai-api-key').value = workspaceData.aiSettings.apiKey || localStorage.getItem('AI_API_KEY') || '';
-  document.getElementById('ai-model').value = workspaceData.aiSettings.model || 'gpt-4o-mini';
-}
-function saveAISettings() {
-  workspaceData.aiSettings = {
-    endpoint: document.getElementById('ai-endpoint').value.trim(),
-    apiKey: document.getElementById('ai-api-key').value.trim(),
-    model: document.getElementById('ai-model').value.trim() || 'gpt-4o-mini',
-  };
-  localStorage.setItem('AI_ENDPOINT', workspaceData.aiSettings.endpoint);
-  localStorage.setItem('AI_API_KEY', workspaceData.aiSettings.apiKey);
-  persistWorkspace();
-  trackEvent('ai_settings_saved', { endpoint: workspaceData.aiSettings.endpoint });
-  document.getElementById('ai-status').innerText = 'Đã lưu cấu hình';
-}
-async function runAIRewrite() {
-  saveAISettings();
-  const text = document.getElementById('ai-input').value.trim();
-  if (!text) return alert('Nhập nội dung cần rewrite trước.');
-  document.getElementById('ai-status').innerText = 'Đang xử lý...';
-  const result = await ipcRenderer.invoke('ai-rewrite', {
-    endpoint: workspaceData.aiSettings.endpoint,
-    apiKey: workspaceData.aiSettings.apiKey,
-    model: workspaceData.aiSettings.model,
-    text,
-    mode: document.getElementById('ai-mode').value,
-  });
-  if (!result.ok) {
-    document.getElementById('ai-status').innerText = result.message || 'Lỗi';
-    return;
-  }
-  document.getElementById('ai-output').value = result.text || '';
-  document.getElementById('ai-status').innerText = 'Hoàn tất';
-  trackEvent('ai_rewrite', { mode: document.getElementById('ai-mode').value });
-}
-
 function renderAll() {
   renderSidebar();
-  renderDashboard();
   renderWorkspaces();
-  renderCRMCurrentChat();
-  renderCampaigns();
   renderQuickReplies();
   renderDownloads();
   renderUpdate();
-  fillAISettings();
 }
 
 avatarPreview.onclick = () => avatarInput.click();
@@ -674,7 +309,6 @@ document.getElementById('modal-save').onclick = () => {
   if (activeProfileId) switchProfile(activeProfileId);
 };
 
-document.getElementById('btn-tools-launcher').onclick = () => setLauncherOpen(!toolsLauncherOpen);
 const btnSidebarBack = document.getElementById('btn-sidebar-back');
 if (btnSidebarBack) {
   btnSidebarBack.onclick = (e) => {
@@ -695,13 +329,6 @@ if (btnSidebarReload) {
     ipcRenderer.send('reload-page');
   };
 }
-document.getElementById('tools-close').onclick = () => setLauncherOpen(false);
-document.querySelectorAll('[data-tools-close="true"]').forEach((el) => {
-  el.onclick = () => setLauncherOpen(false);
-});
-document.querySelectorAll('[data-tool-action]').forEach((el) => {
-  el.onclick = () => runToolAction(el.dataset.toolAction, true);
-});
 document.getElementById('workspace-create-btn').onclick = () => {
   const input = document.getElementById('workspace-name-input');
   const name = input.value.trim() || 'Workspace mới';
@@ -715,20 +342,6 @@ document.getElementById('workspace-create-btn').onclick = () => {
   if (activeProfileId) switchProfile(activeProfileId);
 };
 
-document.getElementById('crm-search').addEventListener('input', renderCRMList);
-document.getElementById('crm-fill-current').onclick = () => {
-  if (!currentChatSnapshot) return alert('Chưa lấy được snapshot tab hiện tại.');
-  fillContactForm({ name: currentChatSnapshot.name || '', phone: '', status: 'new', tags: [currentChatSnapshot.platform || ''], note: `Imported từ ${currentChatSnapshot.platform || 'chat'}` });
-};
-document.getElementById('crm-save').onclick = saveContact;
-document.getElementById('crm-delete').onclick = deleteContact;
-
-document.getElementById('campaign-create').onclick = createCampaign;
-document.getElementById('campaign-run-active').onclick = () => {
-  if (!selectedCampaignId) return alert('Hãy chọn campaign trước.');
-  runCampaign(selectedCampaignId);
-};
-
 document.getElementById('quick-reply-add').onclick = addQuickReplyFromInput;
 document.getElementById('quick-reply-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -736,22 +349,6 @@ document.getElementById('quick-reply-input').addEventListener('keydown', (e) => 
     addQuickReplyFromInput();
   }
 });
-
-document.getElementById('ai-save-settings').onclick = saveAISettings;
-document.getElementById('ai-run').onclick = runAIRewrite;
-document.getElementById('ai-copy').onclick = () => {
-  clipboard.writeText(document.getElementById('ai-output').value || '');
-  document.getElementById('ai-status').innerText = 'Đã copy';
-};
-document.getElementById('ai-save-quick-reply').onclick = () => {
-  const text = document.getElementById('ai-output').value.trim();
-  if (!text) return;
-  workspaceData.quickReplies.push({ message: text });
-  persistWorkspace();
-  trackEvent('quick_reply_created_from_ai', {});
-  renderQuickReplies();
-  document.getElementById('ai-status').innerText = 'Đã lưu vào quick replies';
-};
 
 document.getElementById('update-check').onclick = () => ipcRenderer.send('check-for-updates');
 document.getElementById('update-download').onclick = () => ipcRenderer.send('download-update');
@@ -782,11 +379,6 @@ document.getElementById('lock-password').addEventListener('keydown', (e) => { if
 document.getElementById('lock-password-confirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('lock-submit').click(); });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && toolsLauncherOpen) {
-    e.preventDefault();
-    setLauncherOpen(false);
-    return;
-  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
     e.preventDefault();
     ipcRenderer.send('lock-app');
@@ -794,11 +386,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 ipcRenderer.on('downloads-list', (_, list) => { downloads = list || []; renderDownloads(); });
-ipcRenderer.on('download-updated', (_, item) => { downloads = downloads.filter((entry) => entry.id !== item.id).concat(item); renderDownloads(); renderDashboard(); });
+ipcRenderer.on('download-updated', (_, item) => { downloads = downloads.filter((entry) => entry.id !== item.id).concat(item); renderDownloads(); });
 ipcRenderer.on('update-state', (_, state) => { updateState = state; renderUpdate(); if (state.status === 'available' || state.status === 'downloaded') openOverlay('update-overlay'); });
 ipcRenderer.on('lock-state', (_, state) => {
   hasLockPassword = !!state.hasPassword;
-  document.getElementById('btn-shield').classList.toggle('active', !!state.zadarkShield);
+  const shieldButton = document.getElementById('btn-shield');
+  if (shieldButton) shieldButton.classList.toggle('active', !!state.zadarkShield);
   if (state.locked) showLockOverlay(!hasLockPassword);
 });
 ipcRenderer.on('unlock-result', (_, result) => { if (result.ok) { hasLockPassword = true; hideLockOverlay(); } else alert(result.message || 'Sai mật khẩu.'); });
@@ -820,10 +413,6 @@ ipcRenderer.on('update-profile-info', (_, payload) => {
     renderSidebar();
   }
 });
-ipcRenderer.on('current-chat-info', (_, info) => {
-  currentChatSnapshot = info;
-  renderCRMCurrentChat();
-});
 
 const settings = ipcRenderer.sendSync('get-settings');
 isDarkMode = settings.isDarkMode;
@@ -833,62 +422,10 @@ const sunIcon = document.getElementById('icon-sun');
 const moonIcon = document.getElementById('icon-moon');
 if (sunIcon) sunIcon.style.display = isDarkMode ? 'none' : 'block';
 if (moonIcon) moonIcon.style.display = isDarkMode ? 'block' : 'none';
-document.getElementById('btn-pin').classList.toggle('active', !!settings.alwaysOnTop);
+const pinButton = document.getElementById('btn-pin');
+if (pinButton) pinButton.classList.toggle('active', !!settings.alwaysOnTop);
 const shieldButton = document.getElementById('btn-shield');
 if (shieldButton) shieldButton.classList.toggle('active', !!settings.zadarkShield);
-
-const API_BASE_URL = localStorage.getItem('API_URL') || 'https://api.tiodev.io.vn/v1';
-let accessToken = localStorage.getItem('access_token') || null;
-const authOverlay = document.getElementById('auth-overlay');
-const expiredOverlay = document.getElementById('expired-overlay');
-const authSubmit = document.getElementById('auth-submit');
-const authError = document.getElementById('auth-error');
-function showAuth() { 
-  unlockAppFromAuth(); 
-}
-function showExpired(message, upgradeUrl) { 
-  unlockAppFromAuth(); 
-}
-function unlockAppFromAuth() {
-  if (authOverlay) authOverlay.style.setProperty('display', 'none', 'important');
-  if (expiredOverlay) expiredOverlay.style.setProperty('display', 'none', 'important');
-  ipcRenderer.send('set-browserview-visibility', true);
-  if (activeProfileId) switchProfile(activeProfileId);
-}
-authSubmit.onclick = async () => {
-  const email = document.getElementById('auth-email').value.trim();
-  const password = document.getElementById('auth-password').value;
-  if (!email || !password) {
-    authError.innerText = 'Vui lòng nhập đầy đủ thông tin.';
-    authError.style.display = 'block';
-    return;
-  }
-  authSubmit.innerText = 'Đang đăng nhập...';
-  authSubmit.disabled = true;
-  authError.style.display = 'none';
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, appVersion: require('./package.json').version, os: process.platform }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Đăng nhập thất bại');
-    accessToken = data.accessToken;
-    localStorage.setItem('access_token', accessToken);
-    checkSubscription();
-  } catch (err) {
-    authError.innerText = err.message;
-    authError.style.display = 'block';
-  } finally {
-    authSubmit.innerText = 'Đăng nhập';
-    authSubmit.disabled = false;
-  }
-};
-document.getElementById('expired-logout').onclick = () => { localStorage.removeItem('access_token'); accessToken = null; expiredOverlay.style.display = 'none'; showAuth(); };
-async function checkSubscription() {
-  unlockAppFromAuth();
-}
 
 migrateLegacyProfiles();
 renderAll();

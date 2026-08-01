@@ -1,7 +1,7 @@
 {
   "name": "9meta",
   "version": "1.6.1",
-  "description": "9Meta - Quản lý đa tài khoản Zalo, Messenger, Fanpage, Telegram, WhatsApp...",
+  "description": "MessHub - Quản lý đa tài khoản Zalo, Messenger, Fanpage, Telegram, WhatsApp...",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,7 +12,7 @@
   },
   "build": {
     "appId": "com.tiodev.meta9",
-    "productName": "9Meta",
+    "productName": "MessHub",
     "directories": {
       "output": "dist"
     },
@@ -64,14 +64,14 @@
       "category": "public.app-category.social-networking"
     },
     "dmg": {
-      "title": "9Meta",
-      "artifactName": "9Meta-${version}-mac.${ext}"
+      "title": "MessHub",
+      "artifactName": "MessHub-${version}-mac.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "9Meta",
+      "shortcutName": "MessHub",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "files": [
@@ -87,18 +87,18 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Tio-dev71",
-        "repo": "9Meta"
+        "owner": "PhamThuy1410",
+        "repo": "MessHub"
       }
     ]
   },
   "keywords": [
-    "9Meta",
+    "MessHub",
     "multi-account",
     "desktop",
     "electron"
   ],
-  "author": "Tiodev71",
+  "author": "ThuyP",
   "license": "MIT",
   "devDependencies": {
     "electron": "^29.0.0",

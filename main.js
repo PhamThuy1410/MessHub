@@ -1,7 +1,7 @@
 // ============================================================
 //  Ứng dụng 9Meta Desktop
 //  Nhân: Chromium (Google Chrome)
-//  Tác giả: Nguyễn Đình Thọ
+//  Tác giả: ThuyP
 // ============================================================
 
 const {
@@ -66,10 +66,7 @@ const WORKSPACE_INDEX_PATH = path.join(WORKSPACES_DIR, 'index.json');
 const DEFAULT_WORKSPACE_DATA = {
   profiles: [],
   quickReplies: [],
-  crmContacts: [],
-  campaigns: [],
   analyticsEvents: [],
-  aiSettings: { endpoint: '', apiKey: '', model: 'gpt-4o-mini' },
 };
 
 function ensureDir(dir) {
@@ -84,14 +81,9 @@ function safeJsonWrite(file, data) {
 }
 function normalizeWorkspaceData(data = {}) {
   return {
-    ...DEFAULT_WORKSPACE_DATA,
-    ...data,
     profiles: Array.isArray(data.profiles) ? data.profiles : [],
     quickReplies: Array.isArray(data.quickReplies) ? data.quickReplies : [],
-    crmContacts: Array.isArray(data.crmContacts) ? data.crmContacts : [],
-    campaigns: Array.isArray(data.campaigns) ? data.campaigns : [],
     analyticsEvents: Array.isArray(data.analyticsEvents) ? data.analyticsEvents.slice(-500) : [],
-    aiSettings: { ...DEFAULT_WORKSPACE_DATA.aiSettings, ...(data.aiSettings || {}) },
   };
 }
 function loadWorkspaceIndex() {
@@ -572,14 +564,6 @@ function createWindow() {
     }
     if (senderId) sendToRenderer('update-profile-info', { id: senderId, name: info.name, avatarUrl: info.avatar });
   });
-  ipcMain.on('current-chat-info-extracted', (event, info) => {
-    let senderId = null;
-    for (const [id, view] of Object.entries(browserViews)) {
-      if (view.webContents === event.sender) { senderId = id; break; }
-    }
-    if (senderId) sendToRenderer('current-chat-info', { ...info, profileId: senderId });
-  });
-
   ipcMain.on('update-badge', (event, count) => { if (count !== unreadCount) { const hadNewMessages = count > unreadCount; unreadCount = count; updateBadge(unreadCount); if (hadNewMessages && !mainWindow.isFocused()) mainWindow.flashFrame(true); } });
   ipcMain.on('set-theme', (event, isDark) => { settings.isDarkMode = isDark; saveSettings(settings); nativeTheme.themeSource = isDark ? 'dark' : 'light'; });
   ipcMain.on('toggle-always-on-top', () => { settings.alwaysOnTop = !settings.alwaysOnTop; mainWindow.setAlwaysOnTop(settings.alwaysOnTop); saveSettings(settings); });
@@ -646,68 +630,6 @@ function createWindow() {
       // 2. Kích hoạt bộ gộp thông báo để hiển thị popup tổng hợp ở góc màn hình
       checkOmnichannelNotifications();
     }
-  });
-  ipcMain.handle('ai-rewrite', async (event, payload = {}) => {
-    const { endpoint, apiKey, model, text, mode } = payload;
-    if (!endpoint || !apiKey) return { ok: false, message: 'Chưa cấu hình AI endpoint/API key.' };
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: model || 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'Bạn là trợ lý viết tin nhắn bán hàng tiếng Việt. Trả về duy nhất nội dung tin nhắn đã viết lại.' },
-            { role: 'user', content: `Hãy ${mode || 'viết lại'} tin nhắn sau:\n${text || ''}` },
-          ],
-          temperature: 0.7,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || data.message || 'AI request failed');
-      return { ok: true, text: data.choices?.[0]?.message?.content?.trim() || data.text || '' };
-    } catch (err) { return { ok: false, message: err.message || String(err) }; }
-  });
-  ipcMain.handle('active-chat-send-text', async (event, message = '', options = {}) => {
-    const requestedProfileId = options.profileId || activeProfileId;
-    const view = requestedProfileId && browserViews[requestedProfileId];
-    if (options.platform && options.platform !== 'zalo') return { ok: false, message: 'Bulk send chỉ áp dụng cho Zalo.' };
-    if (!view || !message) return { ok: false, message: 'Chưa có tab Zalo active hoặc nội dung trống.' };
-    try {
-      const currentUrl = view.webContents.getURL() || '';
-      if (!currentUrl.includes('zalo.me')) return { ok: false, message: 'Tab hiện tại không phải Zalo.' };
-      const safeMessage = JSON.stringify(String(message));
-      const result = await view.webContents.executeJavaScript(`
-        (function() {
-          function findInput() {
-            return document.querySelector('[contenteditable="true"][role="textbox"]') ||
-              document.querySelector('[contenteditable="true"]') ||
-              document.querySelector('textarea') ||
-              document.querySelector('input[type="text"]');
-          }
-          function dispatchInput(el) {
-            el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${safeMessage} }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          var input = findInput();
-          if (!input) return { ok: false, message: 'Không tìm thấy ô nhập chat Zalo.' };
-          input.focus();
-          document.execCommand('selectAll', false, null);
-          document.execCommand('insertText', false, ${safeMessage});
-          if (input.value !== undefined) input.value = ${safeMessage};
-          dispatchInput(input);
-          var sendBtn = document.querySelector('[data-translate-title="STR_SEND"]') ||
-            document.querySelector('button[class*="send"]') ||
-            document.querySelector('.chat-input__send-btn') ||
-            document.querySelector('[aria-label="Gửi"]') ||
-            document.querySelector('[aria-label="Send"]');
-          if (sendBtn) sendBtn.click();
-          else input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
-          return { ok: true, message: 'Đã gửi lệnh chèn/gửi vào tab Zalo.' };
-        })();
-      `);
-      return result || { ok: true };
-    } catch (err) { return { ok: false, message: err.message || String(err) }; }
   });
   ipcMain.on('renderer-ready', () => sendToRenderer('lock-state', { locked: settings.lockOnStartup || appLocked, hasPassword: !!settings.lockPasswordHash, zadarkShield: settings.zadarkShield }));
   ipcMain.on('check-for-updates', () => checkForUpdates(true));

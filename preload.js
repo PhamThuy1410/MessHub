@@ -10,21 +10,19 @@ contextBridge.exposeInMainWorld('messengerApp', {
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
   getSettings: () => ipcRenderer.sendSync('get-settings'),
   sendProfileInfo: (info) => ipcRenderer.send('profile-info-extracted', info),
-  sendCurrentChatInfo: (info) => ipcRenderer.send('current-chat-info-extracted', info),
-  sendTextToActiveChat: (message) => ipcRenderer.invoke('active-chat-send-text', message),
 });
 
 const settings = ipcRenderer.sendSync('get-settings');
 
 function runInjection(currentSettings) {
   const injectionScript = `
-    window.__DepLaoBlockSeen = ${currentSettings.blockSeen || false};
-    window.__DepLaoBlockTyping = ${currentSettings.blockTyping || false};
-    window.__DepLaoZaDarkShield = ${currentSettings.zadarkShield || false};
+    window.__MessHubBlockSeen = ${currentSettings.blockSeen || false};
+    window.__MessHubBlockTyping = ${currentSettings.blockTyping || false};
+    window.__MessHubZaDarkShield = ${currentSettings.zadarkShield || false};
 
     (function() {
-      if (window.__DepLaoInjected) return;
-      window.__DepLaoInjected = true;
+      if (window.__MessHubInjected) return;
+      window.__MessHubInjected = true;
       var host = window.location.hostname || '';
       var isZalo = host === 'chat.zalo.me' || host.includes('zalo.me');
       var isMessenger = host.includes('messenger.com') || host.includes('facebook.com');
@@ -35,7 +33,7 @@ function runInjection(currentSettings) {
       if (platform === 'Unknown') return;
 
       function shouldBlockSeen(url) {
-        if (!window.__DepLaoBlockSeen) return false;
+        if (!window.__MessHubBlockSeen) return false;
         if (isZalo) return (url.includes('/api/message/read') || url.includes('/api/message/seen')) && !url.includes('read_status');
         if (isMessenger) return url.includes('change_read_status') || url.includes('mark_read') || url.includes('read_receipt') || url.includes('/ajax/mercury/mark_seen');
         if (isWhatsApp) return url.includes('/read') || url.includes('receipt');
@@ -43,7 +41,7 @@ function runInjection(currentSettings) {
         return false;
       }
       function shouldBlockTyping(url) {
-        if (!window.__DepLaoBlockTyping) return false;
+        if (!window.__MessHubBlockTyping) return false;
         if (isZalo) return url.includes('/api/message/typing');
         if (isMessenger) return url.includes('typ.php') || url.includes('typing_indicator') || url.includes('send_typing_indicator');
         if (isWhatsApp) return url.includes('chatstate') || url.includes('composing') || url.includes('typing');
@@ -53,20 +51,20 @@ function runInjection(currentSettings) {
       function shouldDropPayload(data) {
         if (typeof data !== 'string') return false;
         if (isZalo) {
-          if (window.__DepLaoBlockSeen && (data.includes('"cmd":97') || data.includes('"action":"read"'))) return true;
-          if (window.__DepLaoBlockTyping && (data.includes('"cmd":121') || data.includes('"cmd":122') || data.includes('"action":"typing"'))) return true;
+          if (window.__MessHubBlockSeen && (data.includes('"cmd":97') || data.includes('"action":"read"'))) return true;
+          if (window.__MessHubBlockTyping && (data.includes('"cmd":121') || data.includes('"cmd":122') || data.includes('"action":"typing"'))) return true;
         }
         if (isMessenger) {
-          if (window.__DepLaoBlockSeen && (data.includes('"type":"read"') || data.includes('mark_read') || data.includes('read_receipt'))) return true;
-          if (window.__DepLaoBlockTyping && (data.includes('"type":"typ"') || data.includes('typing') || data.includes('composing'))) return true;
+          if (window.__MessHubBlockSeen && (data.includes('"type":"read"') || data.includes('mark_read') || data.includes('read_receipt'))) return true;
+          if (window.__MessHubBlockTyping && (data.includes('"type":"typ"') || data.includes('typing') || data.includes('composing'))) return true;
         }
         if (isWhatsApp) {
-          if (window.__DepLaoBlockSeen && (data.includes('"read"') || data.includes('"receipt"') || data.includes('"ack"'))) return true;
-          if (window.__DepLaoBlockTyping && (data.includes('"composing"') || data.includes('"chatstate"') || data.includes('"paused"'))) return true;
+          if (window.__MessHubBlockSeen && (data.includes('"read"') || data.includes('"receipt"') || data.includes('"ack"'))) return true;
+          if (window.__MessHubBlockTyping && (data.includes('"composing"') || data.includes('"chatstate"') || data.includes('"paused"'))) return true;
         }
         if (isTelegram) {
-          if (window.__DepLaoBlockSeen && (data.includes('readHistory') || data.includes('messages.read'))) return true;
-          if (window.__DepLaoBlockTyping && (data.includes('sendMessageTypingAction') || data.includes('setTyping'))) return true;
+          if (window.__MessHubBlockSeen && (data.includes('readHistory') || data.includes('messages.read'))) return true;
+          if (window.__MessHubBlockTyping && (data.includes('sendMessageTypingAction') || data.includes('setTyping'))) return true;
         }
         return false;
       }
@@ -75,7 +73,7 @@ function runInjection(currentSettings) {
       window.fetch = function() {
         var args = arguments;
         var url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
-        if (shouldBlockSeen(url) || shouldBlockTyping(url)) return Promise.resolve(new Response(JSON.stringify({error:0,msg:'Blocked by DepLao'}), { status: 200 }));
+        if (shouldBlockSeen(url) || shouldBlockTyping(url)) return Promise.resolve(new Response(JSON.stringify({error:0,msg:'Blocked by MessHub'}), { status: 200 }));
         return originalFetch.apply(this, args);
       };
       var originalXHROpen = XMLHttpRequest.prototype.open;
@@ -100,15 +98,15 @@ function runInjection(currentSettings) {
       };
 
       function applyZaDarkShield() {
-        if (!window.__DepLaoZaDarkShield) return;
+        if (!window.__MessHubZaDarkShield) return;
         try {
           Object.defineProperty(navigator, 'webdriver', { get: function() { return false; }, configurable: true });
         } catch(e) {}
         try {
-          var style = document.getElementById('dep-lao-zadark-style');
+          var style = document.getElementById('messhub-zadark-style');
           if (!style) {
             style = document.createElement('style');
-            style.id = 'dep-lao-zadark-style';
+            style.id = 'messhub-zadark-style';
             style.textContent = 'html{color-scheme:dark;} body{scrollbar-color:#3b82f6 #111827;} ::selection{background:#2563eb!important;color:#fff!important;}';
             document.documentElement.appendChild(style);
           }
@@ -125,15 +123,15 @@ function runInjection(currentSettings) {
       };
 
       // Quick Reply Shortcut System - intercepts /1, /2, etc.
-      window.__DepLaoQuickReplies = ${JSON.stringify(settings.quickReplies || [])};
+      window.__MessHubQuickReplies = ${JSON.stringify(settings.quickReplies || [])};
 
       function setupQuickReplyShortcuts() {
-        if (window.__DepLaoShortcutsReady) return;
-        window.__DepLaoShortcutsReady = true;
+        if (window.__MessHubShortcutsReady) return;
+        window.__MessHubShortcutsReady = true;
 
         document.addEventListener('keydown', function(e) {
           if (e.key !== 'Enter') return;
-          var replies = window.__DepLaoQuickReplies;
+          var replies = window.__MessHubQuickReplies;
           if (!replies || !replies.length) return;
 
           var targetInput = e.target;
@@ -176,7 +174,7 @@ function runInjection(currentSettings) {
 
         // Also show a small hint when user types /
         document.addEventListener('input', function(e) {
-          var replies = window.__DepLaoQuickReplies;
+          var replies = window.__MessHubQuickReplies;
           if (!replies || !replies.length) return;
           var targetInput = e.target;
           if (!targetInput) return;
@@ -185,12 +183,12 @@ function runInjection(currentSettings) {
           if (!isEditable) return;
 
           var text = (targetInput.value !== undefined ? targetInput.value : (targetInput.innerText || targetInput.textContent || '')).trim();
-          var existingHint = document.getElementById('dep-lao-shortcut-hint');
+          var existingHint = document.getElementById('messhub-shortcut-hint');
 
           if (text.match(/^\\/[0-9]*$/)) {
             if (!existingHint) {
               existingHint = document.createElement('div');
-              existingHint.id = 'dep-lao-shortcut-hint';
+              existingHint.id = 'messhub-shortcut-hint';
               existingHint.style.cssText = 'position:absolute;bottom:100%;left:16px;right:16px;background:rgba(20,22,30,.95);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:10px 0;z-index:999;max-height:240px;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.5);';
               var inputContainer = targetInput.closest('[class*="chat-input"]') || targetInput.closest('[role="presentation"]') || targetInput.parentElement;
               if (inputContainer) { inputContainer.style.position = 'relative'; inputContainer.appendChild(existingHint); }
@@ -279,7 +277,6 @@ function runInjection(currentSettings) {
         var info = { name: '', avatar: '' };
         try {
           if (isZalo) {
-            try { require('fs').writeFileSync('/Users/tiodev/Desktop/ZaloPre/zalo_dom.html', document.documentElement.outerHTML); } catch (e) {}
             var nameEl = document.querySelector('.str-name') || document.querySelector('.header-title');
             var avatarEl = document.querySelector('.nav__tabs__avatar img, .zavatar-img, .zavatar img, .avatar-img');
             if (!avatarEl) {
@@ -330,7 +327,7 @@ function runInjection(currentSettings) {
       }
       setInterval(extractProfileInfo, 5000);
 
-      console.log('[DepLao] Shield ready:', platform, window.__DepLaoBlockSeen, window.__DepLaoBlockTyping, window.__DepLaoZaDarkShield);
+      console.log('[MessHub] Shield ready:', platform, window.__MessHubBlockSeen, window.__MessHubBlockTyping, window.__MessHubZaDarkShield);
     })();
   `;
   webFrame.executeJavaScript(injectionScript);
@@ -340,19 +337,19 @@ runInjection(settings);
 
 ipcRenderer.on('update-block-settings', (event, newSettings) => {
   webFrame.executeJavaScript(`
-    window.__DepLaoBlockSeen = ${!!newSettings.blockSeen};
-    window.__DepLaoBlockTyping = ${!!newSettings.blockTyping};
-    window.__DepLaoZaDarkShield = ${!!newSettings.zadarkShield};
-    var style = document.getElementById('dep-lao-zadark-style');
-    if (!window.__DepLaoZaDarkShield && style) style.remove();
-    console.log('[DepLao] Cập nhật bảo mật:', window.__DepLaoBlockSeen, window.__DepLaoBlockTyping, window.__DepLaoZaDarkShield);
+    window.__MessHubBlockSeen = ${!!newSettings.blockSeen};
+    window.__MessHubBlockTyping = ${!!newSettings.blockTyping};
+    window.__MessHubZaDarkShield = ${!!newSettings.zadarkShield};
+    var style = document.getElementById('messhub-zadark-style');
+    if (!window.__MessHubZaDarkShield && style) style.remove();
+    console.log('[MessHub] Cập nhật bảo mật:', window.__MessHubBlockSeen, window.__MessHubBlockTyping, window.__MessHubZaDarkShield);
   `);
 });
 
 ipcRenderer.on('update-quick-replies', (event, replies) => {
   webFrame.executeJavaScript(`
-    window.__DepLaoQuickReplies = ${JSON.stringify(replies)};
-    console.log('[DepLao] Cập nhật tin nhắn mẫu:', window.__DepLaoQuickReplies.length, 'mẫu');
+    window.__MessHubQuickReplies = ${JSON.stringify(replies)};
+    console.log('[MessHub] Cập nhật tin nhắn mẫu:', window.__MessHubQuickReplies.length, 'mẫu');
   `);
 });
 
